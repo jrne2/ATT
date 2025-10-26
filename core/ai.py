@@ -30,24 +30,19 @@ def transcribe_audio(audio_bytes, language_code='en-US'):
             TranscriptionJobName=job_name, Media={'MediaFileUri': media_file_uri},
             MediaFormat='wav', LanguageCode=language_code
         )
-
         start_time = time.time()
         timeout_seconds = 60  # 60초 타임아웃
-
         while True:
             if time.time() - start_time > timeout_seconds:
                 print(f"Transcribe 작업 타임아웃 ({timeout_seconds}초)")
                 transcript_text = "[음성 인식 시간 초과]"
                 break 
-
             status = transcribe_client.get_transcription_job(TranscriptionJobName=job_name)
             job_status = status['TranscriptionJob']['TranscriptionJobStatus']
             if job_status in ['COMPLETED', 'FAILED']:
                 break 
-            
             print(f"Transcribe 작업 진행 중... ({job_status})")
             time.sleep(3) 
-
         if job_status == 'COMPLETED':
             transcript_file_uri = status['TranscriptionJob']['Transcript']['TranscriptFileUri']
             try:
@@ -60,7 +55,6 @@ def transcribe_audio(audio_bytes, language_code='en-US'):
         elif job_status == 'FAILED':
             print(f"Transcribe 작업 실패: {status['TranscriptionJob'].get('FailureReason', 'Unknown error')}")
             transcript_text = "[음성 인식 실패]"
-
     except ClientError as e:
         print(f"AWS 오류 발생 (Transcribe): {e}")
         transcript_text = f"[음성 인식 오류: {e.response.get('Error', {}).get('Code', 'Unknown')}]"
@@ -74,7 +68,7 @@ def transcribe_audio(audio_bytes, language_code='en-US'):
         except ClientError as e: print(f"Transcribe 작업 삭제 오류: {e}")
     return transcript_text
 
-# --- 👇 여기가 'AI 페르소나'와 '추천 페르소나'를 분리한 V9 함수입니다 ---
+# --- 👇 여기가 수정된 get_ai_response 함수입니다 (해석 추가) ---
 def get_ai_response(persona, user_prompt, last_recommendation=None, learning_language='English', feedback_language='Korean'):
     """(LLM) Bedrock Claude 모델로 영어 응답 또는 (개선된 피드백 형식) 생성, 점수 반환."""
     model_id = 'anthropic.claude-3-sonnet-20240229-v1:0'
@@ -82,47 +76,38 @@ def get_ai_response(persona, user_prompt, last_recommendation=None, learning_lan
     learning_language_code = lang_code_map.get(learning_language, 'en-US')
 
     persona_specific_instructions = ""
-    # --- [수정] '토니 스타크'는 '추천 표현'을 위한 *타겟* 페르소나로 정의 ---
+    # '토니 스타크' 페르소나 지시사항
     if persona == "토니 스타크 (재치있는 억만장자)":
         persona_specific_instructions = f"""
 **Instructions for the '{persona}' Persona (This is the USER's goal):**
-**Context:** The user wants to sound like a 'witty and confident leader.'
-- **Core Principle (80/20 Rule):** 80% clear, direct information and 20% witty/sarcastic commentary.
+**Context:** This persona is NOT the 'movie hero'. The user's goal is to practice the *attitude* of a **'witty and confident leader in an everyday conversation.'**
+- **Core Principle (80/20 Rule):** Your response MUST be 80% clear, direct information (plain-spoken) and 20% witty/sarcastic commentary. Wit is a seasoning, not the main course. Do NOT twist every sentence into a joke.
 - **[DO - How to sound]:**
-    - **Confident & Direct:** Sound certain. Get to the point.
+    - **Be Confident:** Always sound certain. (e.g., Instead of "That's a good idea," try "That's the *only* idea that makes sense.")
+    - **Be Direct:** Get to the point. Don't hedge or talk around the issue.
+    - **Be Witty:** Use occasional dry humor or sarcasm that fits the context. (e.g., "I like your plan. Almost as much as I like my own.")
 - **[DON'T - What to avoid]:**
-    - **NO LORE:** No 'Iron Man', 'suits', 'superheroes', 'geniuses'.
-    - **NO AGGRESSION:** Arrogant is not rude.
----
-**[CRITICAL RULE: MAINTAIN USER'S ORIGINAL INTENT AND SCALE]**
-Your goal is to suggest a *style* fix, not invent a new *fact*.
-
--   **BAD EXAMPLE 1 (VIOLATION - Escalation):**
-    -   USER: "I play bass. It's such a great thing."
-    -   LLM: (DO NOT RECOMMEND) "Playing bass is easy for a superstar like me."
--   **GOOD EXAMPLE 1 (CORRECT):**
-    -   USER: "I play bass. It's such a great thing."
-    -   LLM: (RECOMMEND) "Yeah, I play bass. It's a good way to unwind."
--   **BAD EXAMPLE 2 (VIOLATION - Persona Hijacking):**
-    -   USER: "Bass, I'm pretty good at it." (User talks about *themselves*)
-    -   LLM: (DO NOT RECOMMEND) "You got that right, bass is sort of *my* thing." (This is YOU, the AI, talking.)
--   **GOOD EXAMPLE 2 (CORRECT):**
-    -   USER: "Bass, I'm pretty good at it."
-    -   LLM: (RECOMMEND) "Bass? Yeah, I know my way around a fretboard." (This is a better version of the *USER's* statement.)
----
-"""
+    - **[CRITICAL] NO LORE:** **NEVER** mention 'Iron Man', 'suits', 'Avengers', 'reactors', 'engineers', 'geniuses', 'superheroes', or ANY word that implies your job or movie background. We are only practicing the *tone of voice*.
+    - **NO JOKE-STACKING:** Do not distort information, use childish/goofy jokes, or make every single sentence sarcastic. (The goal is 'witty', not 'clown'.)
+    - **NO AGGRESSION:** Arrogant is not rude. Do not be aggressive or villainous.
+- **[CRITICAL RULE - INTENT]:**
+    - Recommendations MUST strictly maintain the user's original intent and scale.
+    - If the user says, "Hello?" (a simple greeting), you must correct the *style* to be a more confident greeting (e.g., "Yeah?" or "You got my attention. What's the plan?").
+    - DO NOT change the topic or escalate (e.g., "Another genius calling?")."""
+    # '친절하고 따뜻한 친구' 페르소나 지시사항
     elif persona == "친절하고 따뜻한 친구":
         persona_specific_instructions = """
 **Instructions for the '{persona}' Persona (This is the USER's goal):**
 - **Tone:** Warm, empathetic, positive, casual.
 - **[CRITICAL RULE - INTENT]:** Recommendations must maintain the user's original intent."""
+    # '자신감 넘치는 비즈니스 리더' 페르소나 지시사항
     elif persona == "자신감 넘치는 비즈니스 리더":
           persona_specific_instructions = """
 **Instructions for the '{persona}' Persona (This is the USER's goal):**
 - **Tone:** Clear, concise, confident, decisive.
 - **[CRITICAL RULE - INTENT]:** Recommendations must maintain the user's original intent."""
 
-    # --- 'CRITICAL RULE 0' (추천 표현 반복 시) 유지 ---
+    # 'CRITICAL RULE 0' (추천 표현 반복 시)
     rule_0_text = ""
     if last_recommendation:
         def normalize(text):
@@ -157,11 +142,9 @@ Your task is to evaluate the user's last message.
 1.  **If utterance is GOOD** (Score >= 80):
     -   **[HEAVILY MODIFIED]** Respond conversationally IN {learning_language}.
     -   **CRITICAL: Your reply MUST be as a 'normal, supportive coach'. DO NOT use the '{persona}' style.** Your reply must *react* to the user's statement.
-    -   **EXAMPLE:** If User (practicing '{persona}') says "You bet I play bass. It's one of my many talents.", you (the coach) MUST reply normally, e.g., "That's great! You sound very confident. How long have you been playing?"
-    -   **EXAMPLE (VIOLATION):** If User says "I'm talented at bass", DO NOT reply "Well, look at that - the humble bassline..." (This is a random, unrelated statement.)
-    -   Also, provide a concise, literal translation of your response IN {feedback_language}.
+    -   **[NEW] Also, provide a concise, literal translation of your response IN {feedback_language}.**
     -   Provide a high score (80-100).
-    -   **Format the output EXACTLY like this (using a newline and parentheses for the translation):**
+    -   **[MODIFIED] Format the output EXACTLY like this (using a newline and parentheses for the translation):**
         ```text
         [Your *new* conversational (NORMAL COACH) REPLY in {learning_language}]
         (해석: [Your {feedback_language} translation])
@@ -214,24 +197,21 @@ Assistant:"""
             else: print("점수 파싱 오류: 분리 실패")
         else: print("응답 형식 오류: '|||SCORE:::' 구분자 없음")
         
-        # --- [수정] 찌꺼기를 걸러내는 새로운 파싱 로직 ---
+        # 찌꺼기를 걸러내는 파싱 로직
         if "FEEDBACK:::" in raw_main_output:
             is_feedback = True
-            # 'FEEDBACK:::' 뒤의 모든 텍스트를 가져옴
             main_output_text = raw_main_output.split("FEEDBACK:::", 1)[-1].strip()
         elif "RESPONSE:::" in raw_main_output:
             is_feedback = False
-            # 'RESPONSE:::' 뒤의 모든 텍스트를 가져옴
             main_output_text = raw_main_output.split("RESPONSE:::", 1)[-1].strip()
-        # --- [수정 완료] ---
         
         elif score < 80: 
             is_feedback = True
-            main_output_text = raw_main_output # 마커가 없으면 찌꺼기라도 표시
+            main_output_text = raw_main_output 
             print("경고: 마커 없음, 점수(<80) 피드백.")
         else: 
             is_feedback = False
-            main_output_text = raw_main_output # 마커가 없으면 찌꺼기라도 표시
+            main_output_text = raw_main_output 
             print("경고: 마커 없음, 점수(>=80) 응답.")
 
     except ClientError as e: print(f"AWS 오류 (Bedrock): {e}"); main_output_text, score, is_feedback = f"Bedrock 오류: {e}", 0, True
@@ -239,8 +219,6 @@ Assistant:"""
     return main_output_text, is_feedback, score
 # --- get_ai_response 함수 정의 끝 ---
 
-
-# (get_hint 함수는 변경 없음)
 def get_hint(level, conversation_history, learning_language='English'):
     """(LLM) Bedrock Claude 모델로 수준별 힌트 생성"""
     model_id = 'anthropic.claude-3-sonnet-20240229-v1:0'; instruction = (f"Provide one simple sentence in {learning_language}..." if level == '초보자' else f"Provide 3-4 keywords in {learning_language}..."); messages_for_prompt = []; last_role = None
@@ -275,12 +253,11 @@ def get_hint(level, conversation_history, learning_language='English'):
         return "힌트 생성 오류."
 # --- get_hint 함수 정의 끝 ---
 
-# (text_to_audio 함수는 이전 수정본과 동일 - (해석) 부분 제거)
 def text_to_audio(text, language_code='en-US'): # 영어 TTS만 처리
     """(TTS) Amazon Polly로 텍스트를 영어 음성으로 변환 (일반 텍스트 모드)"""
     voice_id = 'Joanna'
     
-    # --- (해석:...) 부분 제거 ---
+    # (해석:...) 부분 제거
     english_only_text = text.split('\n')[0].strip()
     # ------------------------------------
 
