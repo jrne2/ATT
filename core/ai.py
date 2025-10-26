@@ -68,30 +68,34 @@ def transcribe_audio(audio_bytes, language_code='en-US'):
         except ClientError as e: print(f"Transcribe 작업 삭제 중 오류 (무시 가능): {e}")
     return transcript_text
 
+# --- 👇 여기가 최종 수정된 get_ai_response 함수입니다 ---
 def get_ai_response(persona, user_prompt, learning_language='English', feedback_language='Korean'):
     """(LLM) Bedrock Claude 모델로 영어 응답 또는 (영어 추천표현 + 한국어 피드백 - 분리된 형식) 생성, 점수 반환."""
     model_id = 'anthropic.claude-3-sonnet-20240229-v1:0'
     lang_code_map = {'English': 'en-US', '영어': 'en-US', 'Korean': 'ko-KR', '한국어': 'ko-KR', 'Japanese': 'ja-JP','일본어': 'ja-JP', 'Spanish': 'es-US', '스페인어': 'es-US'}
-    learning_language_code = lang_code_map.get(learning_language, 'en-US') # 매핑되지 않으면 영어 기본값
+    learning_language_code = lang_code_map.get(learning_language, 'en-US')
 
+    # [수정된 프롬프트] 평가 기준 및 피드백 내용 강화, 출력 형식 명확화
     prompt = f"""
 Human: You are an expert AI speech coach evaluating a user's utterance.
 The user is practicing their '{persona}' persona in {learning_language}.
-Your task is to evaluate the user's last message and provide EITHER a conversational response OR feedback, along with a score. Use SSML for the output text is NOT recommended, use plain text.
+Your task is to evaluate the user's last message based on the criteria below and provide EITHER a conversational response OR feedback, along with a score. Use plain text for the output.
 
-**Evaluation Criteria:** Score >= 80 for Persona Alignment & Fluency/Accuracy.
+**Evaluation Criteria:**
+- **Persona Alignment (Primary):** How well does the utterance's overall style (word choice, tone implied by text, sentence structure, confidence level implied) match the '{persona}' persona? Score >= 80 required for a GOOD rating. Evaluate this strictly. Even if grammatically correct, if the style doesn't fit the persona, it needs improvement.
+- Fluency & Accuracy: Is the utterance reasonably fluent (minimal hesitation implied by text like 'um', 'uh') and grammatically correct? Minor errors are acceptable if communication is clear AND persona alignment is good.
 
 **Decision Logic & Output Format:**
 
-1.  **If utterance is GOOD** (score >= 80):
-    - Respond conversationally IN {learning_language} (1-2 sentences).
+1.  **If utterance is GOOD** (Score >= 80 based PRIMARILY on Persona Alignment):
+    - Respond conversationally IN {learning_language} (1-2 sentences), maintaining the '{persona}' style.
     - Provide a high score (80-100).
     - **Output ONLY:** `RESPONSE:::[Your conversational response in {learning_language}]|||SCORE:::[score]/100`
 
-2.  **If utterance NEEDS IMPROVEMENT** (score < 80):
+2.  **If utterance NEEDS IMPROVEMENT** (Score < 80, primarily due to Persona Alignment or significant Fluency/Accuracy issues):
     - Do NOT respond conversationally.
-    - Determine 1-2 revised examples IN {learning_language}.
-    - Provide the feedback explanation IN {feedback_language}. Focus ONLY on concrete aspects (pronunciation based on text, grammar error, word choice). **MUST avoid abstract advice.** Example: Instead of "Be more friendly", say "Using 'Hi' instead of 'Hello' sounds more friendly.".
+    - Determine 1-2 revised examples IN {learning_language} that better fit the persona.
+    - Provide feedback explanation IN {feedback_language}. Focus ONLY on concrete, actionable points related to **why** the utterance didn't match the persona (e.g., "'Maybe' sounds hesitant for a '{persona}'; try 'Definitely'.") or specific grammar/word choice errors. **MUST avoid abstract advice.**
     - Provide a score (0-79).
     - **Format the feedback text EXACTLY like this, starting with the recommended expression label and using required newlines:**
       ```text
@@ -125,25 +129,34 @@ Assistant:"""
         else: print("응답 형식 오류: '|||SCORE:::' 구분자 없음")
         if not score_part_found: score = 0
 
-        if raw_main_output.startswith("FEEDBACK:::"): is_feedback = True; main_output_text = raw_main_output.replace("FEEDBACK:::", "").strip()
-        elif raw_main_output.startswith("RESPONSE:::"): is_feedback = False; main_output_text = raw_main_output.replace("RESPONSE:::", "").strip()
-        elif score < 80: is_feedback = True; main_output_text = raw_main_output; print("경고: 마커 없음, 점수(<80) 피드백.")
-        else: is_feedback = False; main_output_text = raw_main_output; print("경고: 마커 없음, 점수(>=80) 응답.")
+        # 피드백 여부 판단 로직 보강
+        if raw_main_output.startswith("FEEDBACK:::"):
+            is_feedback = True
+            main_output_text = raw_main_output.replace("FEEDBACK:::", "").strip()
+        elif raw_main_output.startswith("RESPONSE:::"):
+            is_feedback = False
+            main_output_text = raw_main_output.replace("RESPONSE:::", "").strip()
+        # 마커 없더라도 점수 기준으로 판단
+        elif score < 80:
+             is_feedback = True
+             main_output_text = raw_main_output # 마커 없으니 전체 텍스트 사용
+             print("경고: 응답 마커 없음, 점수(<80) 기준으로 피드백 판단.")
+        else: # 마커 없고 점수 높으면 응답
+             is_feedback = False
+             main_output_text = raw_main_output # 마커 없으니 전체 텍스트 사용
+             print("경고: 응답 마커 없음, 점수(>=80) 기준으로 응답 판단.")
 
     except ClientError as e: print(f"AWS 오류 (Bedrock): {e}"); main_output_text, score, is_feedback = f"Bedrock 오류: {e}", 0, True
     except Exception as e: print(f"예외 발생 (Bedrock): {e}"); main_output_text, score, is_feedback = "AI 응답 처리 오류", 0, True
     return main_output_text, is_feedback, score
+# --- get_ai_response 함수 정의 끝 ---
 
-# --- 👇 여기가 수정된 get_hint 함수입니다 (들여쓰기 완료) ---
+
 def get_hint(level, conversation_history, learning_language='English'):
     """(LLM) Bedrock Claude 모델로 수준별 힌트 생성"""
-    model_id = 'anthropic.claude-3-sonnet-20240229-v1:0'
-    instruction = (f"Provide one simple sentence in {learning_language}..." if level == '초보자'
-                   else f"Provide 3-4 keywords in {learning_language}...")
-    messages_for_prompt = []; last_role = None
-    for msg in conversation_history[-4:]:
-        role = "user" if msg.get('role') == "user" else "assistant"; content = msg.get('content')
-        if content and role != last_role: messages_for_prompt.append({"role": role, "content": content}); last_role = role
+    model_id = 'anthropic.claude-3-sonnet-20240229-v1:0'; instruction = (f"Provide one simple sentence in {learning_language}..." if level == '초보자' else f"Provide 3-4 keywords in {learning_language}..."); messages_for_prompt = []; last_role = None
+    for msg in conversation_history[-4:]: role = "user" if msg.get('role') == "user" else "assistant"; content = msg.get('content');
+    if content and role != last_role: messages_for_prompt.append({"role": role, "content": content}); last_role = role
     final_prompt_content = f"Based on history, provide hint.\n**Instruction:** {instruction}\nOnly hint text."
     if not messages_for_prompt or last_role == "assistant": messages_for_prompt.append({"role": "user", "content": final_prompt_content})
     elif last_role == "user": messages_for_prompt[-1]["content"] += "\n\n" + final_prompt_content
@@ -160,7 +173,6 @@ def get_hint(level, conversation_history, learning_language='English'):
     except ClientError as e: print(f"AWS 오류 (Hint): {e}"); return "힌트 생성 오류."
     except Exception as e: print(f"예외 발생 (Hint): {e}"); return "힌트 생성 오류."
 
-# --- text_to_audio 함수는 변경 없음 ---
 def text_to_audio(text, language_code='en-US'): # 영어 TTS만 처리
     """(TTS) Amazon Polly로 텍스트를 영어 음성으로 변환 (일반 텍스트 모드)"""
     voice_id = 'Joanna'; plain_text = re.sub('<[^>]+>', '', text) # SSML 태그 제거
