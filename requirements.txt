@@ -1,0 +1,26 @@
+# requirements.txt 파일 내용
+
+# Streamlit 및 관련 UI/시각화 도구
+streamlit
+streamlit-mic-recorder
+pandas
+altair
+
+# AWS SDK (Bedrock, Transcribe, Polly)
+boto3
+python-dotenv
+
+# 데이터 특징 추출 (Feature Extraction) 도구
+textblob
+textstat
+spacy
+
+# 기타 필수 의존성 (spaCy 관련)
+# blis, cymem, preshed 등은 spacy 설치 시 자동으로 설치되지만,
+# 명시해주는 것이 안정성을 높일 수 있습니다. (생략 가능하나 포함 권장)
+# 정확한 버전은 pip freeze를 통해 확인 후 넣으세요 (예시 버전)
+# blis==0.7.1
+# cymem==2.0.10
+# murmurhash==1.0.9
+# srsly==2.4.8
+# thinc==8.2.3
