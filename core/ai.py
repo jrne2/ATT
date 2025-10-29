@@ -73,7 +73,7 @@ def get_ai_response(persona, user_prompt, complexity_score, last_recommendation=
 
     persona_specific_instructions = ""
     # (페르소나별 지시사항 - 이전과 동일, 생략 없음)
-    if persona == "토니 스타크 (재치있는 억만장자)":
+    if persona == "토니 스타크":
         persona_specific_instructions = f"""
 **Special Instructions for 'Tony Stark (Witty Billionaire)' Persona:**
 - **Focus:** This persona is NOT the 'movie hero'. The user's goal is to practice the *attitude* of a **'witty and confident leader in an everyday conversation.'**

@@ -22,7 +22,7 @@ st.header("⚙️ 페르소나 설정")
 persona_options = (
     "자신감 넘치는 비즈니스 리더",
     "친절하고 따뜻한 친구",
-    "토니 스타크 (재치있는 억만장자)" # '아이언맨' 제거
+    "토니 스타크" # '아이언맨' 제거
 )
 # --- 수정 끝 ---
 default_persona_index = persona_options.index(st.session_state.persona) if st.session_state.persona in persona_options else 0

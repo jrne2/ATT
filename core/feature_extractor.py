@@ -15,7 +15,7 @@ except OSError:
 
 # --- 페르소나별 '개념' 정의 ---
 PERSONA_CONCEPTS = {
-    "토니 스타크 (재치있는 억만장자)": [
+    "토니 스타크": [
         "witty confident humor",
         "arrogant but charming",
         "Performative Humility",

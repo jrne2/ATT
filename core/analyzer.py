@@ -3,7 +3,7 @@ import re
 
 # --- 페르소나별 기대 지표 (키워드 -> 유사도 점수) ---
 PERSONA_EXPECTATIONS = {
-    "토니 스타크 (재치있는 억만장자)": {
+    "토니 스타크": {
         "complexity_min": 5.0, "complexity_max": 12.0,
         "sentiment_min": -0.2, "sentiment_max": 0.8,
         "hedging_penalty": 25, # 회피 표현 감점 (높음)
