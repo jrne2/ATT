@@ -64,7 +64,6 @@ def transcribe_audio(audio_bytes, language_code='en-US'):
         except ClientError as e: print(f"Transcribe 작업 삭제 오류: {e}")
     return transcript_text
 
-# --- 👇 여기가 '사용자 프롬프트' 기준으로 최종 수정한 get_ai_response 함수입니다 ---
 def get_ai_response(persona, user_prompt, complexity_score, last_recommendation=None, learning_language='English', feedback_language='Korean'):
     """(LLM) Bedrock Claude 모델로 영어 응답 또는 (개선된 피드백 형식) 생성, 점수 반환."""
     model_id = 'anthropic.claude-3-sonnet-20240229-v1:0'
@@ -72,7 +71,6 @@ def get_ai_response(persona, user_prompt, complexity_score, last_recommendation=
     learning_language_code = lang_code_map.get(learning_language, 'en-US')
 
     persona_specific_instructions = ""
-    # (페르소나별 지시사항 - 이전과 동일, 생략 없음)
     if persona == "토니 스타크 (재치있는 억만장자)":
         persona_specific_instructions = f"""
 **Special Instructions for 'Tony Stark (Witty Billionaire)' Persona:**
@@ -85,7 +83,16 @@ def get_ai_response(persona, user_prompt, complexity_score, last_recommendation=
 - **[CRITICAL RULE - INTENT]:**
     - Recommendations MUST strictly maintain the user's original intent and scale.
     - **WRONG:** User says "I have to study." -> AI recommends "Pfft, studying? I could ace any exam..." (Escalation)
-    - **GOOD:** User says "I have to study." -> AI recommends "Right, even genius needs *some* light reading. Don't fry your circuits." (Witty + Intent Maintained)"""
+    - **GOOD:** User says "I have to study." -> AI recommends "Right, even genius needs *some* light reading. Don't fry your circuits." (Witty + Intent Maintained)
+    - the persona can be expressed as follows:(
+        "witty confident humor"
+        "arrogant but charming"
+        "Performative Humility"
+        "direct and playful sarcasm"
+        "Control through Humor"
+        "Maintaining Casual Distance")
+    """
+    
     elif persona == "친절하고 따뜻한 친구":
         persona_specific_instructions = f"""
 **Special Instructions for 'Friendly Persona':**
@@ -109,12 +116,12 @@ You MUST treat this as a "GOOD" utterance (Score >= 80).
 You MUST provide a conversational response (Decision Logic 1).
 """
 
-    complexity_threshold = 4.0
+    complexity_threshold = 3.0
     complexity_rule_text = ""
     if complexity_score < complexity_threshold:
         complexity_rule_text = f"""
 **CRITICAL RULE 0.5: UTTERANCE TOO SIMPLE FOR FEEDBACK**
-The user's utterance complexity score is {complexity_score}, which is below the threshold of {complexity_threshold}. This indicates a simple statement (like "Hello", "Yes").
+The user's utterance complexity score is {complexity_score}, which is below the threshold of {complexity_threshold}. This indicates a simple statement (like "Hello", "Yes", "How are you?").
 You MUST NOT provide 'NEEDS IMPROVEMENT' (Decision Logic 2) feedback, even if the style doesn't perfectly match the persona.
 You MUST treat this as a "GOOD" utterance (Score >= 80).
 You MUST provide a conversational response (Decision Logic 1) that is simple and appropriate for the context.
@@ -144,37 +151,40 @@ Do NOT change the topic or meaning. Do NOT exaggerate. Fix the *style*, not the 
 **Decision Logic & Output Format:**
 
 1.  **If utterance is GOOD** (Score >= 80 OR CRITICAL RULE 0 or 0.5 applies):
-    -   Respond conversationally IN {learning_language} as a 'normal, supportive coach'.
-    -   **DO NOT use the '{persona}' style. You must respond to user's statement and ask about so that the conversation continues to next step.**
+    -   Respond conversationally IN {learning_language} as a 'normal, supportive person'.
+    -   DO NOT use the '{persona}' style.** You must respond to user's statement and ask about so that the conversation continues to next step.
     -   Provide a {feedback_language} translation for your response.
     -   Provide a high score (80-100).
     -   **Format the output EXACTLY like this:**
         ```text
         [Your *new* conversational (NORMAL COACH) REPLY in {learning_language}]
-        (해석: [Your {feedback_language} translation])
+        '\n'
+        ([Your {feedback_language} translation])
         ```
-    -   **Output ONLY:** `RESPONSE:::[The formatted text block *you just generated*]|||SCORE:::[score]/100`
+    -   **Output ONLY:** `RESPONSE:::[The formatted text block above]|||SCORE:::[score]/100`
 
 2.  **If utterance NEEDS IMPROVEMENT** (Score < 80 AND CRITICAL RULES 0 and 0.5 do NOT apply):
     -   Do NOT respond conversationally.
     -   Determine 1 revised examples IN {learning_language} that FIX errors AND align with persona, BUT STRICTLY MAINTAIN ORIGINAL INTENT.
     -   Provide a literal translation of the first example IN {feedback_language}.
-    -   Provide a brief diagnosis IN {feedback_language}. This diagnosis **MUST quote the specific problematic word(s) or phrase(s)** from the user's text and explain **WHY** they don't fit the persona (e.g., "The phrase 'I think maybe...' sounds hesitant, which doesn't match the 'Leader' persona's confidence.").
+    -   Provide a brief diagnosis IN {feedback_language} (quoting problematic words). 
+    -   **[NEW SURGICAL FEEDBACK RULE]** Provide a brief diagnosis IN {feedback_language}. This diagnosis **MUST quote the specific problematic word(s) or phrase(s)** from the user's text and explain **WHY** they don't fit the persona (e.g., "The phrase 'I think maybe...' sounds hesitant, which doesn't match the 'Leader' persona's confidence.").
     -   Provide an explanation IN {feedback_language} about a key idiom or vocabulary used.
     -   Provide a score (0-79).
     -   **Format the feedback text EXACTLY like this:**
       ```text
-      🧐 진단: [Your {feedback_language} diagnosis, quoting problematic words]
+      🧐 진단: [Your {feedback_language} diagnosis]
 
       ✅ 추천 표현:
       - "[{learning_language} example 1]"
-        (해석: [Translation of example 1 in {feedback_language}])
+        '\n'
+        ([Translation of example 1 in {feedback_language}])
 
       💡 이 표현은...
-      1.  페르소나 분석: [Explain in {feedback_language} *how* this expression fits '{persona}']
-      2.  **📚 표현 노트:** [{feedback_language} explanation of a key idiom/word]
+      1.  [Explain in {feedback_language} *how* this expression fits '{persona}']
+      2.  **📚 표현 노트:** [{feedback_language} explanation of keys idioms/words.]
       ```
-    -   **Output ONLY:** `FEEDBACK:::[The formatted text block *you just generated*]|||SCORE:::[score]/100`
+    -   **Output ONLY:** `FEEDBACK:::[The formatted text block above]|||SCORE:::[score]/100`
 
 **CRITICAL RULE 2 (PARSING):** Your entire output MUST be only ONE format (RESPONSE or FEEDBACK) and end with the score marker. DO NOT add any extra text or `Human:/Assistant:` turns after the `|||SCORE:::[score]/100` line.
 
@@ -246,8 +256,12 @@ def get_hint(level, conversation_history, learning_language='English'):
 
 def text_to_audio(text, language_code='en-US'): # 영어 TTS만 처리
     """(TTS) Amazon Polly로 텍스트를 영어 음성으로 변환 (일반 텍스트 모드)"""
-    voice_id = 'Joanna'; plain_text = re.sub('<[^>]+>', '', text)
+    voice_id = 'Joanna'; plain_text = re.sub('<[^>]+>', '', text) # SSML 태그 제거
+    
+    # (해석:...) 부분 제거
     english_only_text = text.split('\n')[0].strip()
+    # ------------------------------------
+
     try:
         response = polly_client.synthesize_speech(
             VoiceId=voice_id, OutputFormat='mp3', Text=english_only_text, # 수정된 텍스트 사용

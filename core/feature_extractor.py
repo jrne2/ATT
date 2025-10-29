@@ -4,7 +4,7 @@ import textstat
 import spacy
 import re
 
-# --- 👇 [수정] 'md' 모델 로드 ---
+# ---  'md' 모델 로드 ---
 try:
     nlp = spacy.load("en_core_web_md")
 except OSError:
@@ -13,14 +13,15 @@ except OSError:
     nlp = spacy.load("en_core_web_md")
 # --- 수정 끝 ---
 
-# --- 👇 [수정] 페르소나별 '개념' 정의 ---
-# 단순 키워드가 아닌, 페르소나를 대표하는 '개념' 문장들
+# --- 페르소나별 '개념' 정의 ---
 PERSONA_CONCEPTS = {
     "토니 스타크 (재치있는 억만장자)": [
         "witty confident humor",
         "arrogant but charming",
-        "technology and engineering solution",
-        "direct and playful sarcasm"
+        "Performative Humility",
+        "direct and playful sarcasm",
+        "Control through Humor",
+        "Maintaining Casual Distance"
     ],
     "친절하고 따뜻한 친구": [
         "warm empathetic and positive feeling",
@@ -51,7 +52,7 @@ def get_complexity_score(text):
         print(f"복잡도 계산 오류: {e}")
         return 0
 
-# --- 👇 [신규] '시맨틱 유사도' 계산 함수 ---
+# ---  '시맨틱 유사도' 계산 함수 ---
 def calculate_semantic_similarity(persona, user_prompt_doc):
     """사용자 발화와 페르소나 '개념' 벡터 간의 평균 코사인 유사도 계산"""
     expectations = PERSONA_CONCEPTS.get(persona)
@@ -81,7 +82,7 @@ def calculate_semantic_similarity(persona, user_prompt_doc):
     print("-------------------------------------------------")
     return scaled_score
 
-# --- 👇 [신규] 모든 특징을 한 번에 추출하는 래퍼(wrapper) 함수 ---
+# --- 모든 특징을 한 번에 추출하는 래퍼(wrapper) 함수 ---
 def analyze_text_features(persona, user_prompt):
     """
     사용자 발화 텍스트를 분석하여 모든 특징(feature)이 담긴 딕셔너리를 반환

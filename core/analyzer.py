@@ -1,7 +1,7 @@
 # core/analyzer.py
 import re
 
-# --- 👇 [수정] 페르소나별 기대 지표 (키워드 -> 유사도 점수) ---
+# --- 페르소나별 기대 지표 (키워드 -> 유사도 점수) ---
 PERSONA_EXPECTATIONS = {
     "토니 스타크 (재치있는 억만장자)": {
         "complexity_min": 5.0, "complexity_max": 12.0,
@@ -25,7 +25,6 @@ PERSONA_EXPECTATIONS = {
         "similarity_weight": 0.25
     }
 }
-# --- 수정 끝 ---
 
 # --- 👇 [수정] calculate_feature_score 함수 ---
 def calculate_feature_score(persona, features):
@@ -59,7 +58,7 @@ def calculate_feature_score(persona, features):
     score += sentiment_adjustment
     print(f"Sentiment Adjustment: {sentiment_adjustment}")
 
-    # 3. [수정] 시맨틱 유사도 점수 반영 (키워드 대체)
+    # 3. 시맨틱 유사도 점수 반영
     similarity_bonus = 0
     similarity_weight = expectations.get("similarity_weight", 0.2)
     similarity_min_bonus = expectations.get("similarity_min_bonus", 50)
@@ -70,7 +69,6 @@ def calculate_feature_score(persona, features):
         similarity_bonus = -10 # 최소 유사도 미달 시 감점
     score += similarity_bonus
     print(f"Semantic Similarity Bonus: {similarity_bonus}")
-    # --- 수정 끝 ---
 
     # 4. 회피 표현 (Hedging) 사용 여부 반영
     hedging_penalty_score = 0
@@ -85,9 +83,8 @@ def calculate_feature_score(persona, features):
     print(f"Calculated Feature Score: {final_score}")
     print("---------------------------------------")
     return final_score
-# --- 수정 끝 ---
 
-# --- 👇 [수정] diagnose_user_level 함수 (final_score 입력) ---
+# --- diagnose_user_level 함수 (final_score 입력) ---
 def diagnose_user_level(final_score):
     """'최종 점수'를 바탕으로 수준 진단"""
     if final_score < 50:
@@ -96,4 +93,3 @@ def diagnose_user_level(final_score):
         return "중급자"
     else:
         return "고급자"
-# --- 수정 끝 ---
