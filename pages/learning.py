@@ -4,34 +4,32 @@ load_dotenv()
 from core.session import initialize_session, add_message, clear_messages
 initialize_session()
 import streamlit as st
-# --- [수정] core.ai 임포트 확인 (last_recommendation 인자 필요) ---
 from core.ai import get_ai_response, transcribe_audio, text_to_audio, get_hint
 from streamlit_mic_recorder import mic_recorder
-import core.feature_extractor as fe
-import core.analyzer as an
+import core.feature_extractor as fe # fe 모듈 사용
+import core.analyzer as an # an 모듈 사용
 import re
-import random # 랜덤 주제어를 위해 import
+import random
 
 st.set_page_config(layout="wide", initial_sidebar_state="collapsed")
 st.markdown("""<style>[data-testid="SidebarNav"], [data-testid="stSidebar"] {display: none;}</style>""", unsafe_allow_html=True)
 
-# --- 자동 기록 초기화 및 세션 상태 ---
+# --- 세션 초기화 로직 (이전과 동일) ---
 if st.session_state.get('start_new_session', False):
     clear_messages(); st.session_state.start_new_session = False
     st.session_state.last_processed_audio_id = None
     st.session_state.current_diagnosed_level = "초보자"
     st.session_state.previous_score = None
     st.session_state.recommendation_given_last_turn = False
-    st.session_state.last_recommendation = None # --- [수정] ---
-    # st.session_state.current_topic = "" # clear_messages에서 처리
+    st.session_state.last_recommendation = None
 if 'last_processed_audio_id' not in st.session_state: st.session_state.last_processed_audio_id = None
 if 'current_diagnosed_level' not in st.session_state: st.session_state.current_diagnosed_level = "초보자"
 if 'previous_score' not in st.session_state: st.session_state.previous_score = None
 if 'recommendation_given_last_turn' not in st.session_state: st.session_state.recommendation_given_last_turn = False
 if 'current_topic' not in st.session_state: st.session_state.current_topic = ""
-if 'last_recommendation' not in st.session_state: st.session_state.last_recommendation = None # --- [수정] ---
+if 'last_recommendation' not in st.session_state: st.session_state.last_recommendation = None
+# --- 초기화 끝 ---
 
-# --- 페이지 상단 설정값 정의 ---
 language_options = {'영어': 'en-US'}
 selected_language_name = st.selectbox("학습 언어:", options=list(language_options.keys()), key="lang_select_main")
 selected_language_code = language_options[selected_language_name]
@@ -39,7 +37,6 @@ selected_language_code = language_options[selected_language_name]
 
 st.title("💬 학습하기")
 
-# --- 설정 및 조작 영역 (Expander) ---
 with st.expander("🎤 음성 입력 및 힌트 보기", expanded=True):
     st.write(f"**현재 설정:** 페르소나 '{st.session_state.persona}', 언어 '{selected_language_name}', 진단된 수준 '{st.session_state.current_diagnosed_level}'")
     st.divider()
@@ -55,19 +52,28 @@ with st.expander("🎤 음성 입력 및 힌트 보기", expanded=True):
                 user_prompt_from_audio = transcribe_audio(wav_bytes, language_code=selected_language_code)
                 if user_prompt_from_audio and not user_prompt_from_audio.startswith("[음성 인식"):
                     add_message("user", user_prompt_from_audio)
-                    complexity = fe.get_complexity_score(user_prompt_from_audio); sentiment = fe.get_sentiment(user_prompt_from_audio); keywords = fe.extract_keywords(user_prompt_from_audio)
                     
-                    # --- [수정] AI 호출 시 last_recommendation 전달 ---
+                    # --- 👇 [수정된 부분] 특징 추출 (한번에) ---
+                    features = fe.analyze_text_features(st.session_state.persona, user_prompt_from_audio)
+                    complexity = features.get("complexity", 0)
+                    sentiment = features.get("sentiment", 0)
+                    similarity = features.get("similarity", 0)
+                    hedges = features.get("hedges", 0)
+                    # --- 수정 끝 ---
+                    
                     last_rec = st.session_state.get('last_recommendation', None)
                     main_output_text, is_feedback, score_llm = get_ai_response(
                         st.session_state.persona, 
-                        user_prompt_from_audio, 
-                        last_recommendation=last_rec, # <-- 수정된 인자
+                        user_prompt_from_audio,
+                        complexity_score=complexity, # 복잡도 필터용
+                        last_recommendation=last_rec,
                         learning_language=selected_language_name
                     )
-                    # --- [수정 완료] ---
+                    
+                    # --- 👇 [수정된 부분] 객관적 점수 계산 ---
+                    score_features = an.calculate_feature_score(st.session_state.persona, features)
+                    # --- 수정 끝 ---
 
-                    score_features = an.calculate_feature_score(st.session_state.persona, complexity, sentiment, keywords, user_prompt_from_audio)
                     final_score = int(score_llm * 0.7 + score_features * 0.3)
                     diagnosed_level = an.diagnose_user_level(final_score)
                     st.session_state.current_diagnosed_level = diagnosed_level
@@ -75,29 +81,28 @@ with st.expander("🎤 음성 입력 및 힌트 보기", expanded=True):
                     if st.session_state.recommendation_given_last_turn and st.session_state.previous_score >= 80 and final_score < 80: mimicking_penalty = True
 
                     if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
-                        st.session_state.messages[-1]['features'] = {'complexity': complexity, 'sentiment': sentiment,'score_llm': score_llm, 'score_features': score_features, 'score': final_score, 'keywords': keywords, 'diagnosed_level': diagnosed_level, 'mimicking_penalty': mimicking_penalty}
+                        st.session_state.messages[-1]['features'] = {
+                            'complexity': complexity, 'sentiment': sentiment, 'similarity': similarity, 'hedges': hedges, # 추출된 특징 모두 저장
+                            'score_llm': score_llm, 'score_features': score_features, 'score': final_score, 
+                            'diagnosed_level': diagnosed_level, 'mimicking_penalty': mimicking_penalty
+                        }
 
                     ai_audio_bytes = None; log_entry = {"role": "assistant"}
                     text_for_tts = ""; recommendation_provided_this_turn = False
-                    
-                    # --- [수정] 피드백 여부에 따라 last_recommendation 상태 업데이트 ---
                     if is_feedback:
                         log_entry["feedback"] = main_output_text
                         example_match = re.search(r'✅ 추천 표현:\s*-?\s*"([^"/]+)', main_output_text)
                         if example_match:
-                            english_example = example_match.group(1).strip()
-                            text_for_tts = f"You can say... {english_example}"
-                            recommendation_provided_this_turn = True
-                            st.session_state.last_recommendation = english_example # <-- 추천 표현 '기억'
-                            if english_example not in st.session_state.learned_expressions: st.session_state.learned_expressions.append(english_example) # 추천 표현 저장
-                        else:
-                            st.session_state.last_recommendation = None # <-- 추천 표현 파싱 실패
+                             english_example = example_match.group(1).strip()
+                             text_for_tts = f"You can say... {english_example}"
+                             recommendation_provided_this_turn = True
+                             if english_example not in st.session_state.learned_expressions: st.session_state.learned_expressions.append(english_example)
+                        else: st.session_state.last_recommendation = None
                     elif main_output_text:
                         log_entry["content"] = main_output_text
-                        text_for_tts = main_output_text
-                        st.session_state.last_recommendation = None # <-- 피드백 아님 (대화/성공), '기억' 초기화
-                    # --- [수정 완료] ---
-
+                        text_for_tts = main_output_text.split('\n')[0].strip() # 영어 응답 (첫 줄)만
+                        st.session_state.last_recommendation = None
+                    
                     if text_for_tts:
                         ai_audio_bytes = text_to_audio(text_for_tts, language_code=selected_language_code)
                         if ai_audio_bytes: log_entry["audio"] = ai_audio_bytes
@@ -118,22 +123,14 @@ with st.expander("🎤 음성 입력 및 힌트 보기", expanded=True):
 st.divider()
 
 st.write("마이크를 이용해 음성으로 대화하거나, 아래 입력창에 텍스트를 입력하세요.")
-
-# --- 👇 [수정된 부분] 랜덤 주제어 표시 ---
-if not st.session_state.messages: # 대화 기록이 없을 때만 (새 세션)
-    if st.session_state.current_topic == "": # 토픽이 아직 없으면 생성
-        topic_list_default = ["your day at work", "a recent movie you watched", "your weekend plans", "your favorite hobby"]
-        topic_list_ironman = ["your day at work", "a recent movie you watched", "your weekend plans", "your favorite hobby"]
-        
-        # --- [수정] 페르소나 이름 일치 ---
+if not st.session_state.messages:
+    if st.session_state.current_topic == "":
+        topic_list_default = ["a recent movie you watched", "your weekend plans", "your favorite hobby", "what you had for lunch", "your favorite season"]
+        topic_list_ironman = ["your latest gadget or tech toy", "your (over-the-top) weekend plans", "the problem you most recently solved", "your favorite (or least favorite) new trend"]
         if st.session_state.persona == "토니 스타크 (재치있는 억만장자)":
             st.session_state.current_topic = random.choice(topic_list_ironman)
-        else:
-            st.session_state.current_topic = random.choice(topic_list_default)
-    
+        else: st.session_state.current_topic = random.choice(topic_list_default)
     st.info(f"💡 대화 시작 주제: **{st.session_state.current_topic}**에 대해 말해보세요.")
-# --- 수정 끝 ---
-
 if st.session_state.messages:
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
@@ -142,34 +139,43 @@ if st.session_state.messages:
                 display_text = message.get("content", "")
                 st.markdown(display_text)
                 if "features" in message:
-                    penalty_info = " (추천 의존도 높음!)" if message['features'].get('mimicking_penalty') else ""
-                    level_info = f", 진단 수준: {message['features'].get('diagnosed_level', 'N/A')}"
-                    st.caption(f"분석: 점수({message['features'].get('score', 'N/A')}{penalty_info}), LLM({message['features'].get('score_llm', 'N/A')}), 특징({message['features'].get('score_features', 'N/A')}), 복잡도({message['features'].get('complexity', 0):.1f}), 감성({message['features'].get('sentiment', 0):.1f}){level_info}")
+                     penalty_info = " (추천 의존도 높음!)" if message['features'].get('mimicking_penalty') else ""
+                     level_info = f", 진단 수준: {message['features'].get('diagnosed_level', 'N/A')}"
+                     # --- 👇 [수정된 부분] 캡션에 'similarity' 추가 ---
+                     st.caption(f"분석: 점수({message['features'].get('score', 'N/A')}{penalty_info}), LLM({message['features'].get('score_llm', 'N/A')}), 특징({message['features'].get('score_features', 'N/A')}), 복잡도({message['features'].get('complexity', 0):.1f}), 감성({message['features'].get('sentiment', 0):.1f}), **유사도({message['features'].get('similarity', 0):.1f})**{level_info}")
+                     # --- 수정 끝 ---
             elif message["role"] == "assistant":
                 display_text = message.get("feedback") or message.get("content", "")
                 if display_text: st.markdown(display_text)
                 if "audio" in message and message["audio"]:
                     st.audio(message["audio"], format="audio/mp3", autoplay=True)
 else:
-    # 대화 기록이 없을 때 (맨 처음) st.info 외에 추가 메시지 방지
     pass
 
 if user_prompt := st.chat_input("텍스트 메시지를 입력해보세요..."):
     add_message("user", user_prompt)
     with st.spinner("AI가 분석 중..."):
-        complexity = fe.get_complexity_score(user_prompt); sentiment = fe.get_sentiment(user_prompt); keywords = fe.extract_keywords(user_prompt)
+        # --- 👇 [수정된 부분] 특징 추출 (한번에) ---
+        features = fe.analyze_text_features(st.session_state.persona, user_prompt)
+        complexity = features.get("complexity", 0)
+        sentiment = features.get("sentiment", 0)
+        similarity = features.get("similarity", 0)
+        hedges = features.get("hedges", 0)
+        # --- 수정 끝 ---
         
-        # --- [수정] AI 호출 시 last_recommendation 전달 ---
         last_rec = st.session_state.get('last_recommendation', None)
         main_output_text, is_feedback, score_llm = get_ai_response(
             st.session_state.persona, 
-            user_prompt, 
-            last_recommendation=last_rec, # <-- 수정된 인자
+            user_prompt,
+            complexity_score=complexity, # 복잡도 필터용
+            last_recommendation=last_rec,
             learning_language=selected_language_name
         )
-        # --- [수정 완료] ---
         
-        score_features = an.calculate_feature_score(st.session_state.persona, complexity, sentiment, keywords, user_prompt)
+        # --- 👇 [수정된 부분] 객관적 점수 계산 ---
+        score_features = an.calculate_feature_score(st.session_state.persona, features)
+        # --- 수정 끝 ---
+
         final_score = int(score_llm * 0.7 + score_features * 0.3)
         diagnosed_level = an.diagnose_user_level(final_score)
         st.session_state.current_diagnosed_level = diagnosed_level
@@ -177,28 +183,28 @@ if user_prompt := st.chat_input("텍스트 메시지를 입력해보세요..."):
         if st.session_state.recommendation_given_last_turn and st.session_state.previous_score >= 80 and final_score < 80: mimicking_penalty = True
         
         if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
-            st.session_state.messages[-1]['features'] = {'complexity': complexity, 'sentiment': sentiment,'score_llm': score_llm, 'score_features': score_features, 'score': final_score, 'keywords': keywords, 'diagnosed_level': diagnosed_level, 'mimicking_penalty': mimicking_penalty}
+             st.session_state.messages[-1]['features'] = {
+                 'complexity': complexity, 'sentiment': sentiment, 'similarity': similarity, 'hedges': hedges,
+                 'score_llm': score_llm, 'score_features': score_features, 'score': final_score, 
+                 'diagnosed_level': diagnosed_level, 'mimicking_penalty': mimicking_penalty
+             }
 
         ai_audio_bytes = None; log_entry = {"role": "assistant"}
         text_for_tts = ""; recommendation_provided_this_turn = False
-        
-        # --- [수정] 피드백 여부에 따라 last_recommendation 상태 업데이트 ---
         if is_feedback:
             log_entry["feedback"] = main_output_text
             example_match = re.search(r'✅ 추천 표현:\s*-?\s*"([^"/]+)', main_output_text)
             if example_match:
-                english_example = example_match.group(1).strip()
-                text_for_tts = f"You can say... {english_example}"
-                recommendation_provided_this_turn = True
-                st.session_state.last_recommendation = english_example # <-- 추천 표현 '기억'
-                if english_example not in st.session_state.learned_expressions: st.session_state.learned_expressions.append(english_example)
-            else:
-                st.session_state.last_recommendation = None # <-- 추천 표현 파싱 실패
+                 english_example = example_match.group(1).strip()
+                 text_for_tts = f"You can say... {english_example}"
+                 recommendation_provided_this_turn = True
+                 st.session_state.last_recommendation = english_example
+                 if english_example not in st.session_state.learned_expressions: st.session_state.learned_expressions.append(english_example)
+            else: st.session_state.last_recommendation = None
         elif main_output_text:
             log_entry["content"] = main_output_text
-            text_for_tts = main_output_text
-            st.session_state.last_recommendation = None # <-- 피드백 아님 (대화/성공), '기억' 초기화
-        # --- [수정 완료] ---
+            text_for_tts = main_output_text.split('\n')[0].strip() # 영어 응답 (첫 줄)만
+            st.session_state.last_recommendation = None
         
         if text_for_tts:
             ai_audio_bytes = text_to_audio(text_for_tts, language_code=selected_language_code)
