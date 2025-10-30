@@ -38,7 +38,7 @@ st.title("💬 학습하기")
 
 # --- 👇 [수정된 부분] 페르소나별 '연기 가이드' 팁 ---
 persona_guide_texts = {
-    "토니 스타크 (재치있는 억만장자)": "💡 **Tip:** 토니 스타크처럼 **재치있고 자신감 넘치는** 느낌을 살려 말해보세요. (약간의 유머와 냉소 포함)",
+    "토니 스타크": "💡 **Tip:** 토니 스타크처럼 **재치있고 자신감 넘치는** 느낌을 살려 말해보세요. (약간의 유머와 냉소 포함)",
     "친절하고 따뜻한 친구": "💡 **Tip:** 상대방에게 **공감하며, 따뜻하고 친절한** 느낌으로 말해보세요.",
     "자신감 넘치는 비즈니스 리더": "💡 **Tip:** **명확하고, 간결하며, 자신감 넘치는** 리더의 어조로 말해보세요."
 }
@@ -151,7 +151,7 @@ if not st.session_state.messages:
     if st.session_state.current_topic == "":
         topic_list_default = ["a recent movie you watched", "your weekend plans", "your favorite hobby", "what you had for lunch", "your favorite season"]
         topic_list_ironman = ["your latest gadget or tech toy", "your (over-the-top) weekend plans", "the problem you most recently solved", "your favorite (or least favorite) new trend"]
-        if current_persona == "토니 스타크 (재치있는 억만장자)":
+        if current_persona == "토니 스타크":
             st.session_state.current_topic = random.choice(topic_list_ironman)
         else:
             st.session_state.current_topic = random.choice(topic_list_default)

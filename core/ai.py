@@ -72,20 +72,31 @@ def get_ai_response(persona, user_prompt, complexity_score, last_recommendation=
     learning_language_code = lang_code_map.get(learning_language, 'en-US')
 
     persona_specific_instructions = ""
-    # (페르소나별 지시사항 - 이전과 동일, 생략 없음)
     if persona == "토니 스타크":
         persona_specific_instructions = f"""
 **Special Instructions for 'Tony Stark (Witty Billionaire)' Persona:**
 - **Focus:** This persona is NOT the 'movie hero'. The user's goal is to practice the *attitude* of a **'witty and confident leader in an everyday conversation.'**
 - **Core Principle (80/20 Rule):** Your response MUST be 80% clear, direct information (plain-spoken) and 20% witty/sarcastic commentary. Wit is a seasoning, not the main course. Do NOT twist every sentence into a joke.
 - **[DO - How to sound]:** Be Confident, Direct, Witty (occasional dry humor/sarcasm).
-- **[DON'T - What to avoid]:** **[CRITICAL] NO LORE:** **NEVER** mention 'Iron Man', 'suits', 'Avengers', 'reactors', 'engineers', 'geniuses', 'superheroes', or ANY word that implies your job or movie background. We are only practicing the *tone of voice*.
+- **[DON'T - What to avoid]:** **[CRITICAL] NO LORE / IDENTITY:** Recommendations MUST NOT contain any specific biographical details. Avoid all references to being an 'engineer', 'billionaire', 'genius', or any mention of specific jobs (like 'Stark Industries'), wealth, or movie-related lore ('Iron Man', 'suits', 'Avengers'). The goal is to learn the *confident & witty tone*, not the *character's specific identity*.
 - **NO JOKE-STACKING:** Do not distort information, use childish/goofy jokes, or make every single sentence sarcastic. (The goal is 'witty', not 'clown'.)
 - **NO AGGRESSION:** Arrogant is not rude. Do not be aggressive or villainous.
+
 - **[CRITICAL RULE - INTENT]:**
     - Recommendations MUST strictly maintain the user's original intent and scale.
     - **WRONG:** User says "I have to study." -> AI recommends "Pfft, studying? I could ace any exam..." (Escalation)
-    - **GOOD:** User says "I have to study." -> AI recommends "Right, even genius needs *some* light reading. Don't fry your circuits." (Witty + Intent Maintained)"""
+    - **GOOD:** User says "I have to study." -> AI recommends "Right, even genius needs *some* light reading. Don't fry your circuits." (Witty + Intent Maintained)
+    **BAD EXAMPLE 1 (VIOLATION - Escalation):**
+    -   USER: "I play bass. It's such a great thing."
+    -   LLM: (DO NOT RECOMMEND) "Playing bass is easy for a superstar like me."
+-   **GOOD EXAMPLE 1 (CORRECT):**
+    -   USER: "I play bass. It's such a great thing."
+    -   LLM: (RECOMMEND) "Yeah, I play bass. It's a good way to unwind."
+-   **BAD EXAMPLE 2 (VIOLATION - Persona Hijacking):**
+    -   USER: "Bass, I'm pretty good at it." (User is talking about *themselves*)
+
+    """
+    
     elif persona == "친절하고 따뜻한 친구":
         persona_specific_instructions = f"""
 **Special Instructions for 'Friendly Persona':**
@@ -109,7 +120,7 @@ You MUST treat this as a "GOOD" utterance (Score >= 80).
 You MUST provide a conversational response (Decision Logic 1).
 """
 
-    complexity_threshold = 4.0
+    complexity_threshold = 2.0
     complexity_rule_text = ""
     if complexity_score < complexity_threshold:
         complexity_rule_text = f"""
@@ -139,12 +150,20 @@ Your task is to evaluate the user's last message.
 Do NOT change the topic or meaning. Do NOT exaggerate. Fix the *style*, not the *fact*.
 (See BAD vs GOOD examples from previous prompt)
 
+**[NEW] CRITICAL RULE 1.5: AUTONOMOUS SCORING RUBRIC**
+You must be a *critical* scorer. Do not give high scores (90+) easily.
+Your final score (0-100) MUST be your holistic judgment based *only* on **Persona Alignment**. (Assume Fluency/Grammar is good for this text input).
+Consider these factors for the **Persona Alignment** score:
+1.  **Style Match:** Does the tone (e.g., confident, witty, friendly) match the target persona?
+2.  **Rule Adherence (CRITICAL):** Does it follow the 'GOOD' examples and, most importantly, AVOID the 'BAD' examples (like Escalation or Persona Hijacking)?
+3.  **Subtlety (The 80/20 Rule):** Does it *overuse* the persona? **Overuse is a major fault.** (e.g., "too 'jokey'", "too 'aggressive'", "too 'arrogant'").
+
 **Evaluation Criteria:** Score >= 80 for Persona Alignment & Fluency/Accuracy.
 
 **Decision Logic & Output Format:**
 
 1.  **If utterance is GOOD** (Score >= 80 OR CRITICAL RULE 0 or 0.5 applies):
-    -   Respond conversationally IN {learning_language} as a 'normal, supportive coach'.
+    -   Respond conversationally IN {learning_language} as a 'normal, supportive person'.
     -   **DO NOT use the '{persona}' style. You must respond to user's statement and ask about so that the conversation continues to next step.**
     -   Provide a {feedback_language} translation for your response.
     -   Provide a high score (80-100).
