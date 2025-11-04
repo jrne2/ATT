@@ -86,7 +86,7 @@ with st.expander("🎤 음성 입력 및 힌트 보기", expanded=True):
                     score_features = an.calculate_feature_score(current_persona, features)
                     
                     # 4. 최종 점수 (하이브리드)
-                    final_score = int(score_llm * 0.7 + score_features * 0.3)
+                    final_score = int(score_llm * 0.5 + score_features * 0.5)
                     
                     # 5. 수준 진단 (최종 점수 기반)
                     diagnosed_level = an.diagnose_user_level(final_score)
